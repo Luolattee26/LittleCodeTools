@@ -120,7 +120,8 @@ class calc:
 
             # calculate the fraction
             wig_score = self.phloP.values(chr_num, start, end)
-            wig_score_sig = [(10 ^ int(-x)) for x in wig_score if x > 0]
+            wig_score_P = [(10 ^ int(-x)) for x in wig_score if x > 0]
+            wig_score_sig = [x for x in wig_score_P if x < 0.01]
 
             fraction.append(len(wig_score_sig) / len(wig_score))
 
@@ -128,3 +129,29 @@ class calc:
         df = pd.DataFrame({'transID': self.target, 'result': fraction})
 
         return df
+    
+    
+    
+#########################################################################################################################
+# examples
+#########################################################################################################################
+
+# import numpy as np
+# import pyBigWig
+# import pandas as pd
+# from calc_phastCon_and_phloP import calc
+
+
+# lst1 = ['TP53', 'H19']
+# all_trans_bed = pd.read_csv('/data/jxwang_data/WMDS_lncRNA/all.transcripts.bed', sep = '\t', header = None)
+# Con_bw_file = pyBigWig.open('/data/jxwang_data/WMDS_lncRNA/hg38.phastCons100way.bw')
+# P_bw_file = pyBigWig.open('/data/jxwang_data/WMDS_lncRNA/hg38.phyloP100way.bw')
+
+# calc1 = calc(all_trans_bed, Con_bw_file, P_bw_file, lst1)
+
+# calc1.get_trans_ID_from_gene()
+
+# a = calc1.phloP_percent()
+# b = calc1.best_200_phastCon(test=True, log=True)
+
+# print(a,'\n',b)
