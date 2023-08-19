@@ -399,7 +399,7 @@ def main(algorithms=''):
             X_data, y_data, test_size=0.25, random_state=0)
 
         ME = MaxEnt(algorithms='')
-        a = ME.fit(X_train, y_train)
+        ME.fit(X_train, y_train)
 
         score = 0
 
