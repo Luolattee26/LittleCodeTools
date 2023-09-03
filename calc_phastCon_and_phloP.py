@@ -1,6 +1,6 @@
 import numpy as np
-import pyBigWig
 import pandas as pd
+import time
 
 
 class calc:
@@ -11,7 +11,7 @@ class calc:
         print('phloP_percent:get significant fraction of each trans')
 
     def __init__(self, trans_file=None, phastCon_file=None, phloP_file=None, target_list=None):
-        
+
         self.trans = trans_file
         self.phastCon = phastCon_file
         self.phloP = phloP_file
@@ -27,17 +27,21 @@ class calc:
         self.trans.columns = header[:len(self.trans.columns)]
 
     def best_200_phastCon(self, test=False, log=False):
+        count = 0
         best_200_list = []
         score_sum = []
-        
+
         if ('ENST' in self.target[0]) == False:
             print('please run get_trans_ID_from_gene method first')
             return
-            
+
+        s = time.time()
         for trans in self.target:
 
             if log == True:
-                print(trans)
+                count += 1
+                print(trans, 'Percent {}%'.format(
+                    count / len(self.target) * 100))
 
             # get chrom position for every trans
             single_trans = self.trans.loc[self.trans.loc[:,
@@ -67,43 +71,68 @@ class calc:
 
             single_trans_score_list = [
                 x for x in single_trans_score_list if np.isnan(x) == False]
-            best_200_list.append(max(single_trans_score_list))
-            score_sum.append(sum(single_trans_score_list))
+            if single_trans_score_list != []:
+                best_200_list.append(max(single_trans_score_list))
+                score_sum.append(sum(single_trans_score_list))
+            else:
+                best_200_list.append("No data")
+                score_sum.append("No data")
 
         # to check the code, there should be different sum value between the trans
         if test == True:
             print('Next is the sum of each 200bp per trans, if the calculation is right, the number will be different form each other')
             print(score_sum)
-            
+
         # output DataFrame
         df = pd.DataFrame({'transID': self.target, 'result': best_200_list})
+        e = time.time()
+        print('cost time {}s'.format(e - s))
 
         return df
 
     def get_trans_ID_from_gene(self):
-        
+
         if ('ENST' in self.target[0]) == True:
             print('no need to translate')
             return
-        
+
         transID_list = []
 
-        for gene in self.target:
-            gene_to_bed = self.trans.loc[self.trans.loc[:, 'Symbol'] == gene, ]
-            transID = list(gene_to_bed.loc[:, 'trans_ID'])
-            transID_list += transID
+        if ('ENSG' in self.target[0]) == True:
+            gene_ID_set = set(self.trans.loc[:, "gene_ID"])
+            lst = []
 
-        self.target = transID_list
-        print('the translation is done')
+            for gene in self.target:
+                for i in gene_ID_set:
+                    if gene in i:
+                        lst.append(i)
 
-        return transID_list
+            for gene in lst:
+                gene_to_bed = self.trans.loc[self.trans.loc[:,
+                                                            'gene_ID'] == gene, ]
+                transID = list(gene_to_bed.loc[:, 'trans_ID'])
+                transID_list += transID
+
+            self.target = transID_list
+            print('the translation is done')
+        else:
+            for gene in self.target:
+                gene_to_bed = self.trans.loc[self.trans.loc[:,
+                                                            'Symbol'] == gene, ]
+                transID = list(gene_to_bed.loc[:, 'trans_ID'])
+                transID_list += transID
+
+            self.target = transID_list
+            print('the translation is done')
+
+        return self.target
 
     def phloP_percent(self, log=False):
-        
+
         if ('ENST' in self.target[0]) == False:
             print('please run get_trans_ID_from_gene method first')
             return
-        
+
         fraction = []
         for trans in self.target:
 
@@ -129,12 +158,15 @@ class calc:
         df = pd.DataFrame({'transID': self.target, 'result': fraction})
 
         return df
-    
-    
-    
+
+
 #########################################################################################################################
 # examples
 #########################################################################################################################
+
+# import sys
+# sys.path.append('/data/jxwang_data/WMDS_lncRNA/')
+
 
 # import numpy as np
 # import pyBigWig
@@ -154,4 +186,4 @@ class calc:
 # a = calc1.phloP_percent()
 # b = calc1.best_200_phastCon(test=True, log=True)
 
-# print(a,'\n',b)
+# print('\n','phyloP fraction','\n',a,'\n','best200_phastCon','\n',b)
