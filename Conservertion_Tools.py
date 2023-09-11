@@ -23,10 +23,10 @@ class calc:
             print('use help method to get usage')
 
         header = ['chrom', 'chromStart', 'chromEnd', 'gene_ID',
-                  'trans_ID', 'Symbol', 'location', 'type']
+                'trans_ID', 'Symbol', 'location', 'type']
         self.trans.columns = header[:len(self.trans.columns)]
 
-    def best_200_phastCon(self, test=False, log=False):
+    def best_200_phastCon(self, test=False, log=False, cores=1):
         count = 0
         best_200_list = []
         score_sum = []
@@ -36,47 +36,58 @@ class calc:
             return
 
         s = time.time()
-        for trans in self.target:
 
+        def process_trans(trans):
             if log == True:
+                nonlocal count
                 count += 1
                 print(trans, 'Percent {}%'.format(
                     count / len(self.target) * 100))
 
             # get chrom position for every trans
             single_trans = self.trans.loc[self.trans.loc[:,
-                                                         'trans_ID'] == trans, ]
+                                                        'trans_ID'] == trans, ]
             # print(single_trans)
             chr_num = single_trans.iloc[0, 0]
             start = single_trans.iloc[0, 1]
             end = single_trans.iloc[0, 2]
 
-            # score list
-            single_trans_score_list = []
-
             # calculate best 200bp
-            for index in range(start, end):
-                if (end - index) > 200:
-                    score = self.phastCon.values(chr_num, index, (index+200))
-                    score_no_NAN = [x for x in score if np.isnan(x) == False]
-                    score_mean = np.mean(score_no_NAN)
-                    single_trans_score_list.append(score_mean)
-                elif (end - index) == 200:
-                    score = self.phastCon.values(chr_num, index, end)
-                    score_no_NAN = [x for x in score if np.isnan(x) == False]
-                    score_mean = np.mean(score_no_NAN)
-                    single_trans_score_list.append(score_mean)
+            scores = self.phastCon.values(chr_num, start, end)
+            
+            no_nan = []
+            for i in scores:
+                if np.isnan(i) == True:
+                    no_nan.append(0)
                 else:
-                    break
+                    no_nan.append(1)
+                    
+            no_nan_sums = np.cumsum(no_nan)
+            no_nan_sums[200:] = no_nan_sums[200:] - no_nan_sums[:-200]
+            no_nan_sums = [10 ** 10 if x == 0 else x for x in no_nan_sums]
+            
+            scores = np.nan_to_num(scores, nan=0)
+            
+            
+            score_sums = np.cumsum(scores)
+            score_sums[200:] = score_sums[200:] - score_sums[:-200]
 
-            single_trans_score_list = [
-                x for x in single_trans_score_list if np.isnan(x) == False]
-            if single_trans_score_list != []:
-                best_200_list.append(max(single_trans_score_list))
-                score_sum.append(sum(single_trans_score_list))
+            means = score_sums[199:] / no_nan_sums[199:]
+            
+            if means.size > 0:
+                best_200_list.append(np.max(means))
+                score_sum.append(np.sum(means))
             else:
-                best_200_list.append("No data")
-                score_sum.append("No data")
+                best_200_list.append('No data')
+                score_sum.append('No data')
+
+        # pool = Pool(processes=cores)
+        # pool.map(process_trans, self.target)
+        # pool.close()
+        
+        for i in self.target:
+            process_trans(i)
+        
 
         # to check the code, there should be different sum value between the trans
         if test == True:
@@ -141,7 +152,7 @@ class calc:
 
             # get chrom position for every trans
             single_trans = self.trans.loc[self.trans.loc[:,
-                                                         'trans_ID'] == trans, ]
+                                                        'trans_ID'] == trans, ]
             # print(single_trans)
             chr_num = single_trans.iloc[0, 0]
             start = single_trans.iloc[0, 1]
@@ -158,33 +169,3 @@ class calc:
         df = pd.DataFrame({'transID': self.target, 'result': fraction})
 
         return df
-
-
-#########################################################################################################################
-# examples
-#########################################################################################################################
-
-# import sys
-# sys.path.append('/data/jxwang_data/WMDS_lncRNA/')
-
-
-# import numpy as np
-# import pyBigWig
-# import pandas as pd
-# from calc_phastCon_and_phloP import calc
-
-
-# lst1 = ['TP53', 'H19']
-# all_trans_bed = pd.read_csv('/data/jxwang_data/WMDS_lncRNA/all.transcripts.bed', sep = '\t', header = None)
-# Con_bw_file = pyBigWig.open('/data/jxwang_data/WMDS_lncRNA/hg38.phastCons100way.bw')
-# P_bw_file = pyBigWig.open('/data/jxwang_data/WMDS_lncRNA/hg38.phyloP100way.bw')
-
-# calc1 = calc(all_trans_bed, Con_bw_file, P_bw_file, lst1)
-
-# calc1.get_trans_ID_from_gene()
-
-
-# a = calc1.phloP_percent()
-# b = calc1.best_200_phastCon(test=True, log=True)
-
-# print('\n','phyloP fraction','\n',a,'\n','best200_phastCon','\n',b)
