@@ -10,12 +10,15 @@ class calc:
         print('get_trans_ID_from_gene:get transID from gene symbol')
         print('phloP_percent:get significant fraction of each trans')
 
-    def __init__(self, trans_file=None, phastCon_file=None, phloP_file=None, target_list=None):
+    def __init__(self, trans_file=None, phastCon_file=None, phloP_file=None, target_list=None, whether_time=True):
 
         self.trans = trans_file
         self.phastCon = phastCon_file
         self.phloP = phloP_file
         self.target = target_list
+        self.get_time = whether_time
+        self.time = {'best_200_phastCon':0, 'get_trans_ID_from_gene':0, 
+                    'normal_phyloP':0, 'phloP_percent':0}
 
         if ('ENST' in self.target[0]) == False:
             print('please run get_trans_ID_from_gene method first')
@@ -97,11 +100,14 @@ class calc:
         # output DataFrame
         df = pd.DataFrame({'transID': self.target, 'result': best_200_list})
         e = time.time()
-        print('cost time {}s'.format(e - s))
+
+        self.time['best_200_phastCon'] = e - s
 
         return df
 
     def get_trans_ID_from_gene(self):
+
+        s = time.time()
 
         if ('ENST' in self.target[0]) == True:
             print('no need to translate')
@@ -135,10 +141,16 @@ class calc:
 
             self.target = transID_list
             print('the translation is done')
+        
+        e = time.time()
+
+        self.time['get_trans_ID_from_gene'] = e - s
 
         return self.target
 
-    def phloP_percent(self, log=False):
+    def phloP_percent(self, log=False, pvalue_cut=0.01):
+
+        s = time.time()
 
         if ('ENST' in self.target[0]) == False:
             print('please run get_trans_ID_from_gene method first')
@@ -161,11 +173,86 @@ class calc:
             # calculate the fraction
             wig_score = self.phloP.values(chr_num, start, end)
             wig_score_P = [(10 ^ int(-x)) for x in wig_score if x > 0]
-            wig_score_sig = [x for x in wig_score_P if x < 0.01]
+            wig_score_sig = [x for x in wig_score_P if x < pvalue_cut]
 
             fraction.append(len(wig_score_sig) / len(wig_score))
 
         # output DataFrame
         df = pd.DataFrame({'transID': self.target, 'result': fraction})
 
+        e = time.time()
+
+        self.time['phloP_percent'] = e - s
+
         return df
+    
+    def normal_phyloP(self, log=False):
+
+        s = time.time()
+
+        if ('ENST' in self.target[0]) == False:
+            print('please run get_trans_ID_from_gene method first')
+            return
+        
+        mean_phyloP = []
+
+        for trans in self.target:
+
+            if log == True:
+                print(trans)
+
+            # get chrom position for every trans
+            single_trans = self.trans.loc[self.trans.loc[:,
+                                                        'trans_ID'] == trans, ]
+            # print(single_trans)
+            chr_num = single_trans.iloc[0, 0]
+            start = single_trans.iloc[0, 1]
+            end = single_trans.iloc[0, 2]
+
+            # calculate the fraction
+            wig_score = self.phloP.values(chr_num, start, end)
+            mean_value = np.mean(wig_score)
+
+            mean_phyloP.append(mean_value)
+
+            # print(sum(wig_score)/(start-end))
+
+        # output DataFrame
+        df = pd.DataFrame({'transID': self.target, 'result': mean_phyloP})
+
+        e = time.time()
+
+        self.time['normal_phyloP'] = e - s
+
+        return df
+    
+    def time_recordor(self):
+        if self.get_time:
+            return self.time
+
+
+
+if __name__ == '__main__':
+    print('Running test \n target lncRNA: [TP53, H19]')
+
+    import sys
+    sys.path.append('/data/jxwang_data/WMDS_lncRNA/')
+
+    import numpy as np
+    import pyBigWig
+    import pandas as pd
+
+    lst1 = ['TP53', 'H19']
+    all_trans_bed = pd.read_csv('/data/jxwang_data/WMDS_lncRNA/all.transcripts.bed', sep = '\t', header = None)
+    Con_bw_file = pyBigWig.open('/data/jxwang_data/WMDS_lncRNA/hg38.phastCons100way.bw')
+    P_bw_file = pyBigWig.open('/data/jxwang_data/WMDS_lncRNA/hg38.phyloP100way.bw')
+
+    calc1 = calc(all_trans_bed, Con_bw_file, P_bw_file, lst1)
+
+    calc1.get_trans_ID_from_gene()
+
+    a = calc1.normal_phyloP()
+    b = calc1.best_200_phastCon()
+    c = calc1.phloP_percent()
+    
+    print('\n', 'phyloP mean', '\n', a, '\n', 'best 200 bp phastCon', b, '\n', 'phyloP percent', c, '\n', 'costing time', calc1.time_recordor())
